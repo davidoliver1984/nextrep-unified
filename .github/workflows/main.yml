@@ -1,6 +1,7 @@
 name: Deploy NextRep
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
