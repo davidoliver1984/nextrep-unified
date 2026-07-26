@@ -1,0 +1,129 @@
+name: Deploy NextRep
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nextrep-production
+  cancel-in-progress: false
+
+jobs:
+  test-build-deploy:
+    runs-on: ubuntu-latest
+    environment: A2 Hosting
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: apps/web/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm ci --prefix apps/web --include=optional --no-audit --no-fund
+
+      - name: Lint web
+        run: npm run lint --prefix apps/web
+
+      - name: Test web
+        run: npm run test --prefix apps/web
+
+      - name: Build web
+        run: npm run build --prefix apps/web
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          extensions: dom, fileinfo, gd, mbstring, sqlite
+          coverage: none
+
+      - name: Validate Composer configuration
+        working-directory: apps/api
+        run: composer validate --strict
+
+      - name: Install API dependencies
+        working-directory: apps/api
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Audit API dependencies
+        working-directory: apps/api
+        run: composer audit --locked
+
+      - name: Check API formatting
+        working-directory: apps/api
+        run: vendor/bin/pint --test
+
+      - name: Test API
+        working-directory: apps/api
+        run: php artisan test
+
+      - name: Deploy web
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: apps/web/dist/
+          server-dir: /nextrep/web/
+          log-level: standard
+          exclude: |
+            **/.DS_Store
+
+      - name: Deploy API code
+        uses: SamKirkland/FTP-Deploy-Action@v4.4.0
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: apps/api/
+          server-dir: /nextrep/api/
+          log-level: standard
+          exclude: |
+            .git/**
+            .github/**
+            vendor/**
+            node_modules/**
+            storage/**
+            tests/**
+            .env
+            .env.*
+            **/.DS_Store
+
+      - name: Finalise Laravel deployment
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 7822
+          script: |
+            set -e
+            cd "$HOME/dolved.com/nextrep/api"
+
+            composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+
+            mkdir -p \
+              storage/app/private \
+              storage/framework/cache/data \
+              storage/framework/sessions \
+              storage/framework/views \
+              storage/logs
+
+            chmod -R 775 storage bootstrap/cache
+
+            php artisan optimize:clear
+            php artisan migrate --force
+            php artisan optimize
+            php artisan queue:restart || true
