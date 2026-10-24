@@ -157,6 +157,31 @@ class JournalImageAuthorizationTest extends ApiTestCase
         $this->assertDatabaseCount('journal_images', 0);
     }
 
+    public function test_shortcut_can_skip_a_missing_journal_without_stopping_its_batch(): void
+    {
+        Storage::fake('local');
+        config(['filesystems.default' => 'local']);
+
+        $user = $this->authenticate();
+        $this->journal($user, ['date' => '2026-08-11']);
+        $file = UploadedFile::fake()->image('unmatched.jpg');
+
+        $this->postJson('/api/journal-images/by-date', [
+            'date' => '2026-08-12',
+            'image_base64' => base64_encode(file_get_contents($file->getRealPath())),
+            'skip_missing' => '1',
+        ])->assertOk()
+            ->assertJson([
+                'uploaded' => false,
+                'status' => 'skipped',
+                'message' => 'No journal exists for 2026-08-12.',
+                'date' => '2026-08-12',
+            ]);
+
+        $this->assertDatabaseCount('journals', 1);
+        $this->assertDatabaseCount('journal_images', 0);
+    }
+
     public function test_upload_by_date_requires_an_exact_date_and_image(): void
     {
         $this->authenticate();

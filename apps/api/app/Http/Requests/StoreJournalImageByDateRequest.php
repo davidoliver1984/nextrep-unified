@@ -18,6 +18,7 @@ class StoreJournalImageByDateRequest extends FormRequest
             'date' => ['required', 'date_format:Y-m-d'],
             'image' => ['nullable', 'required_without:image_base64', 'image', 'max:5120'],
             'image_base64' => ['nullable', 'required_without:image', 'string', 'max:7340032'],
+            'skip_missing' => ['sometimes', 'boolean'],
         ];
     }
 

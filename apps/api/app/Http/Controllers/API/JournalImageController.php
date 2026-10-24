@@ -46,6 +46,15 @@ class JournalImageController extends Controller
             ->first();
 
         if (! $journal) {
+            if ($request->boolean('skip_missing')) {
+                return response()->json([
+                    'uploaded' => false,
+                    'status' => 'skipped',
+                    'message' => "No journal exists for {$date}.",
+                    'date' => $date,
+                ]);
+            }
+
             return response()->json([
                 'message' => "No journal exists for {$date}.",
                 'date' => $date,

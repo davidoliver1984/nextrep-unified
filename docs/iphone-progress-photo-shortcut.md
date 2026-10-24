@@ -29,6 +29,7 @@ The date must already exist in the signed-in user's journals. An unmatched date 
    - Request Body: `Form`
    - Form field `date`: the formatted date from step 4
    - Text form field `image_base64`: the Base64 result from step 6
+   - Text form field `skip_missing`: `1`, so an unmatched date is safely skipped without stopping the remaining batch
 8. Below **End Repeat**, add **Show Notification** with the message `Progress photos uploaded to NextRep`.
 
 Use a token returned by `POST /api/login`. Treat it like a password and do not share the Shortcut while the token is embedded in it.
