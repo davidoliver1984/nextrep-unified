@@ -78,6 +78,7 @@ export function DatePickerField({
           <Calendar
             mode="single"
             selected={selected}
+            defaultMonth={selected}
             onSelect={(d) => {
               if (!d) return;
               onChange(toYmd(d));
