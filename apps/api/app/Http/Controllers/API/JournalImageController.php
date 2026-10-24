@@ -6,6 +6,7 @@ use App\Actions\JournalImages\CreateJournalImage;
 use App\Actions\JournalImages\DeleteJournalImage;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ListJournalImagesRequest;
+use App\Http\Requests\StoreJournalImageByDateRequest;
 use App\Http\Requests\StoreJournalImageRequest;
 use App\Http\Resources\JournalImageResource;
 use App\Models\Journal;
@@ -33,6 +34,34 @@ class JournalImageController extends Controller
         $image = $action->handle($journal, $request->file('image'));
 
         return (new JournalImageResource($image))
+            ->response()
+            ->setStatusCode(201);
+    }
+
+    public function storeForDate(StoreJournalImageByDateRequest $request, CreateJournalImage $action)
+    {
+        $date = $request->validated('date');
+        $journal = $request->user()->journals()
+            ->whereDate('date', $date)
+            ->first();
+
+        if (! $journal) {
+            return response()->json([
+                'message' => "No journal exists for {$date}.",
+                'date' => $date,
+            ], 404);
+        }
+
+        if ($request->hasFile('image')) {
+            $image = $action->handle($journal, $request->file('image'));
+        } else {
+            $contents = $request->decodedImage();
+            $imageInfo = getimagesizefromstring($contents);
+            $extension = image_type_to_extension($imageInfo[2], false) ?: 'jpg';
+            $image = $action->handleContents($journal, $contents, $extension);
+        }
+
+        return (new JournalImageResource($image->load('journal')))
             ->response()
             ->setStatusCode(201);
     }

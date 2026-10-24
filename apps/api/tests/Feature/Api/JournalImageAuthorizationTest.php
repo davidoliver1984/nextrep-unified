@@ -79,6 +79,106 @@ class JournalImageAuthorizationTest extends ApiTestCase
             ->assertJsonMissing(['id' => $image->id]);
     }
 
+    public function test_user_can_upload_an_image_to_their_journal_by_exact_date(): void
+    {
+        Storage::fake('local');
+        config(['filesystems.default' => 'local']);
+
+        $user = $this->authenticate();
+        $journal = $this->journal($user, ['date' => '2026-08-12']);
+
+        $created = $this->postJson('/api/journal-images/by-date', [
+            'date' => '2026-08-12',
+            'image' => UploadedFile::fake()->image('progress.jpg', 1000, 800),
+        ])->assertCreated()
+            ->assertJsonPath('data.journal_id', $journal->id)
+            ->assertJsonPath('data.journal_date', '2026-08-12');
+
+        $image = JournalImage::findOrFail($created->json('data.id'));
+        Storage::disk('local')->assertExists($image->path);
+    }
+
+    public function test_user_can_upload_a_base64_image_to_their_journal_by_exact_date(): void
+    {
+        Storage::fake('local');
+        config(['filesystems.default' => 'local']);
+
+        $user = $this->authenticate();
+        $journal = $this->journal($user, ['date' => '2026-08-12']);
+        $file = UploadedFile::fake()->image('progress.jpg', 1000, 800);
+
+        $created = $this->postJson('/api/journal-images/by-date', [
+            'date' => '2026-08-12',
+            'image_base64' => base64_encode(file_get_contents($file->getRealPath())),
+        ])->assertCreated()
+            ->assertJsonPath('data.journal_id', $journal->id)
+            ->assertJsonPath('data.journal_date', '2026-08-12');
+
+        $image = JournalImage::findOrFail($created->json('data.id'));
+        Storage::disk('local')->assertExists($image->path);
+    }
+
+    public function test_upload_by_date_never_uses_another_users_journal(): void
+    {
+        Storage::fake('local');
+        config(['filesystems.default' => 'local']);
+
+        $this->authenticate();
+        $other = User::factory()->create();
+        $this->journal($other, ['date' => '2026-08-12']);
+
+        $this->postJson('/api/journal-images/by-date', [
+            'date' => '2026-08-12',
+            'image' => UploadedFile::fake()->image('private.jpg'),
+        ])->assertNotFound()
+            ->assertJsonPath('message', 'No journal exists for 2026-08-12.');
+
+        $this->assertDatabaseCount('journal_images', 0);
+    }
+
+    public function test_upload_by_date_does_not_create_or_guess_a_journal(): void
+    {
+        Storage::fake('local');
+        config(['filesystems.default' => 'local']);
+
+        $user = $this->authenticate();
+        $this->journal($user, ['date' => '2026-08-11']);
+
+        $this->postJson('/api/journal-images/by-date', [
+            'date' => '2026-08-12',
+            'image' => UploadedFile::fake()->image('unmatched.jpg'),
+        ])->assertNotFound()
+            ->assertJson([
+                'message' => 'No journal exists for 2026-08-12.',
+                'date' => '2026-08-12',
+            ]);
+
+        $this->assertDatabaseCount('journals', 1);
+        $this->assertDatabaseCount('journal_images', 0);
+    }
+
+    public function test_upload_by_date_requires_an_exact_date_and_image(): void
+    {
+        $this->authenticate();
+
+        $this->postJson('/api/journal-images/by-date', [
+            'date' => '12/08/2026',
+            'image' => UploadedFile::fake()->create('notes.txt', 10, 'text/plain'),
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['date', 'image']);
+    }
+
+    public function test_upload_by_date_rejects_invalid_base64_image_data(): void
+    {
+        $this->authenticate();
+
+        $this->postJson('/api/journal-images/by-date', [
+            'date' => '2026-08-12',
+            'image_base64' => base64_encode('not an image'),
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors('image_base64');
+    }
+
     public function test_upload_requires_an_image_within_size_limit(): void
     {
         $user = $this->authenticate();

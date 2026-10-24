@@ -20,9 +20,15 @@ class CreateJournalImage
     public function handle(Journal $journal, UploadedFile $file): JournalImage
     {
         $extension = $file->extension() ?: 'bin';
+        $contents = file_get_contents($file->getRealPath());
+
+        return $this->handleContents($journal, $contents, $extension);
+    }
+
+    public function handleContents(Journal $journal, string $contents, string $extension): JournalImage
+    {
         $path = "journals/{$journal->id}/".Str::uuid().".{$extension}";
         $thumbnailPath = $this->thumbnails->pathFor($path);
-        $contents = file_get_contents($file->getRealPath());
 
         try {
             $this->storage->put($path, $contents);

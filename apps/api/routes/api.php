@@ -31,6 +31,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->name('journals.images.index');
     Route::post('journals/{journal}/images', [JournalImageController::class, 'store'])
         ->name('journals.images.store');
+    Route::post('journal-images/by-date', [JournalImageController::class, 'storeForDate'])
+        ->name('journal-images.store-for-date');
     Route::get('journal-images/{journalImage}', [JournalImageController::class, 'show'])
         ->name('journal-images.show');
     Route::delete('journal-images/{journalImage}', [JournalImageController::class, 'destroy'])
